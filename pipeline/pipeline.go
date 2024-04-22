@@ -7,6 +7,7 @@ package pipeline
 import (
 	"bufio"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -26,6 +27,7 @@ type Pipeline struct {
 
 // NewPipeline - конструктор конвейера
 func NewPipeline() *Pipeline {
+	log.Println("Создан новый экземпляр конвейера")
 	return &Pipeline{stop: make(chan bool)}
 }
 
@@ -34,6 +36,7 @@ func NewPipeline() *Pipeline {
 // данные игнорирует. Принимает канал data в аргументах только для
 // соответствия сигнатуры остальным методам.
 func (p *Pipeline) Input(data <-chan int) <-chan int {
+	log.Println("Введите целые числа через пробел или команду stop для остановки конвейера")
 	scanner := bufio.NewScanner(os.Stdin)
 	output := make(chan int)
 	go func() {
@@ -63,8 +66,9 @@ func (p *Pipeline) StageOne(data <-chan int) <-chan int {
 	go func() {
 		for {
 			select {
-			case d := <-data:
-				if d > 0 {
+			case d, ok := <-data:
+				if ok && d >= 0 {
+					log.Printf("Стадия 1. Отфильтровано число %d\n", d)
 					filtered <- d
 				}
 			case <-p.stop:
@@ -82,8 +86,9 @@ func (p *Pipeline) StageTwo(data <-chan int) <-chan int {
 	go func() {
 		for {
 			select {
-			case d := <-data:
-				if d != 0 && d%3 == 0 {
+			case d, ok := <-data:
+				if ok && d != 0 && d%3 == 0 {
+					log.Printf("Стадия 2. Отфильтровано число %d\n", d)
 					filtered <- d
 				}
 			case <-p.stop:
@@ -109,6 +114,7 @@ func (p *Pipeline) StageThree(data <-chan int) <-chan int {
 				for r.IsFull() {
 					continue
 				}
+				log.Printf("Стадия 3. Отфильтровано число %d\n", d)
 				err = r.Write(d)
 				if err != nil {
 					fmt.Printf("Ошибка работы буфера: %v\n", err)
@@ -150,7 +156,7 @@ func (p *Pipeline) Output(data <-chan int) <-chan int {
 		for {
 			select {
 			case d := <-data:
-				fmt.Printf("Обработанные данные: %d\n", d)
+				log.Printf("Обработанное число: %d\n", d)
 			case <-p.stop:
 				close(output)
 				return
@@ -162,6 +168,7 @@ func (p *Pipeline) Output(data <-chan int) <-chan int {
 
 // Run - метод, запускающий сколько угодно одинаковых по сигнатуре методов конвейера
 func (p *Pipeline) Run(stages ...func(<-chan int) <-chan int) {
+	log.Println("Запуск конвейера")
 	data := make(<-chan int)
 	for i := 0; i < len(stages); i++ {
 		data = stages[i](data)
@@ -171,5 +178,5 @@ func (p *Pipeline) Run(stages ...func(<-chan int) <-chan int) {
 // Wait - блокирует завершение основной горутины до вызова остановки конвейера
 func (p *Pipeline) Wait() {
 	<-p.stop
-	fmt.Println("Завершение работы")
+	log.Printf("Завершение работы конвейера... ")
 }
